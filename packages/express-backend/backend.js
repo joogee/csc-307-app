@@ -1,6 +1,9 @@
 // backend.js
 import express from "express";
 import cors from "cors";
+import userservice from "./services/user-service.js";
+import dotenv from "dotenv";
+import mongoose from "mongoose";
 
 const users = {
   users_list: [
@@ -31,6 +34,14 @@ const users = {
     },
   ],
 };
+
+dotenv.config();
+
+const { MONGO_CONNECTION_STRING } = process.env;
+
+mongoose.set("debug", true);
+mongoose.connect(MONGO_CONNECTION_STRING).catch((error) => console.log(error));
+
 const app = express();
 const port = 8000;
 
@@ -42,69 +53,43 @@ app.get("/", (req, res) => {
   res.send("Hello World!");
 });
 
-const findUserByName = (users, name) => {
-  return users["users_list"].filter((user) => user["name"] === name);
-};
-
-const findUserByJob = (users, job) => {
-  return users["users_list"].filter((user) => user["job"] === job);
-};
-
-app.get("/users", (req, res) => {
+app.get("/users", async (req, res) => {
   const name = req.query.name;
   const job = req.query.job;
-  var result = users;
-  if (name != undefined) {
-    result = findUserByName(result, name);
-    result = { users_list: result };
-  }
-  if (job != undefined) {
-    result = findUserByJob(result, job);
-    result = { users_list: result };
-  }
-  res.send(result);
+  userservice.getUsers(name, job).then((result) => res.send(result));
 });
 
-const findUserById = (id) =>
-  users["users_list"].find((user) => user["id"] === id);
-
-app.get("/users/:id", (req, res) => {
+app.get("/users/:id", async (req, res) => {
   const id = req.params["id"]; //or req.params.id
-  let result = findUserById(id);
-  if (result === undefined) {
-    res.status(404).send("Resource not found.");
-  } else {
-    res.send(result);
-  }
+  userservice.findUserById(id).then((result) => {
+    if (result === undefined) {
+      res.status(404).send("Resource not found.");
+    } else {
+      res.send(result);
+    }
+  });
 });
-
-const addUser = (user) => {
-  users["users_list"].push(user);
-  return user;
-};
 
 function generateID() {
   return Math.floor(Math.random() * 1000000000);
 }
 
-app.post("/users", (req, res) => {
+app.post("/users", async (req, res) => {
   const userToAdd = req.body;
-  userToAdd.id = generateID();
-  addUser(userToAdd);
-  res.status(201).send(userToAdd);
+  // userToAdd.id = generateID();
+  userservice.addUser(userToAdd).then(() => res.status(201).send(userToAdd));
 });
 
 app.delete("/users/:id", (req, res) => {
   const id = req.params["id"]; //or req.params.id
-  let result = findUserById(parseInt(id, 10));
-  if (result === undefined) {
-    res.status(404).send("Resource not found.");
-  } else {
-    users["users_list"] = users["users_list"].filter(
-      (user) => user["id"] !== id
-    );
-  }
-  res.status(204).send();
+  userservice
+    .findUserByIdAndDelete(id)
+    .then((result) => {
+      res.status(204).send();
+    })
+    .catch((error) => {
+      res.status(404).send("Resource not found.");
+    });
 });
 
 app.listen(port, () => {
